@@ -11,7 +11,7 @@
 (require 'llm)
 (require 'llm-openai)
 
-(defgroup nalec nil "NAtural Language Commander for Emacs (nalec).")
+(defgroup nalec nil "NAtural Language Commander for Emacs (nalec)." :group 'external)
 (defcustom nalec-openai-api-key "" "A valid OpenAI API key." :type 'string)
 (defcustom nalec-openai-model "gpt-4o-mini" "OpenAI model to use for nalec." :type 'string)
 
@@ -91,7 +91,8 @@ DESC is a string description of the text to be inserted."
 
 (defun nalec-replace (instr)
   "Replace selected region based on natural language instructions.
-INSTR is a string containing natural language instructions for modifying the selected region."
+INSTR is a string containing natural language instructions for modifying
+the selected region."
   (interactive "sReplace region by: ")
   (when (string-empty-p instr) () (setq instr "whatever is appropriate"))
   (let* ((original (buffer-substring-no-properties
@@ -121,10 +122,10 @@ Argument RESP is the response from the llm."
 			  (gethash "replacement_string" resp-object))))
 
 (defun nalec-regexp (instr)
-  "Generate a regular expression and replacement string according to\
-instructions, and then give them as arguments to `query-replace-regexp'.
- INSTR is a string describing the aim of the `query-replace-regexp' command
- in natural language."
+  "Carry out regexp search and replace based on natural language instructions.
+INSTR is a string describing the aim of the regular expression search and
+replace.  It is used to generate regexp and replacement strings that are then
+passed to `query-replace-regexp'."
   (interactive "sReplace using regexp: ")
   (let* ((prompt
 	  (llm-make-chat-prompt
