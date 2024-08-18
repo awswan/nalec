@@ -27,8 +27,8 @@
 ;; Same context prompt is used for both inserting and replacing
 (defvar nalec-insert-prompt-context
   "The user is editing a file in emacs. Generate text to insert directly\
- into the file based on their instructions. Do not include explanation or\
- code block quotes.")
+ into the file based on their instructions. Do not include explanation.\
+ Do not quote inside a code block.")
 
 ;; Message prompts
 (defun nalec-insert-prompt-text (desc)
@@ -94,7 +94,7 @@ DESC is a string description of the text to be inserted."
 INSTR is a string containing natural language instructions for modifying
 the selected region."
   (interactive "sReplace region by: ")
-  (when (string-empty-p instr) () (setq instr "whatever is appropriate"))
+  (when (string-empty-p instr) (setq instr "whatever is appropriate"))
   (let* ((original (buffer-substring-no-properties
 		    (region-beginning) (region-end)))
 	 (prompt (llm-make-chat-prompt (nalec-replace-prompt-text instr original)
