@@ -20,15 +20,40 @@
 (make-variable-buffer-local 'nalec-most-recent-prompt)
 (make-variable-buffer-local 'nalec-most-recent-request)
 
+(defvar nalec-turbo-mode nil)
+(defun nalec-toggle-turbo-mode ()
+  (interactive)
+  (setq nalec-turbo-mode (not nalec-turbo-mode))
+  (message
+   (if nalec-turbo-mode
+       "Nalec turbo mode enabled"
+     "Nalec turbo mode disabled")))
+
 (defun nalec-provider ()
   "Generate an llm-provider.  Currently only works for openai."
   (make-llm-openai :key nalec-openai-api-key :chat-model nalec-openai-model))
 
 ;; Same context prompt is used for both inserting and replacing
-(defvar nalec-insert-prompt-context
-  "The user is editing a file in emacs. Generate text to insert directly\
- into the file based on their instructions. Do not include explanation.\
- Do not quote inside a code block.")
+(defun nalec-insert-prompt-context ()
+  (concat
+   "The user is editing a file in emacs. Generate text to insert directly\
+ into the file based on their instructions. "
+   (if nalec-turbo-mode
+       "Briefly explain your reasoning and then enclose the text\
+ to insert in a code block."
+   "Do not include explanation.")))
+
+(defun nalec-regexp-prompt-context ()
+  (concat
+   "You assist the user by generating emacs compatible regular expression\
+ and replace strings suitable for `replace-regexp' to carry out their\
+ tasks. "
+   (if nalec-turbo-mode
+       "Briefly explain your reasoning and then give the regular\
+ expression and replace string as a json object with two string fields\
+ labelled \"regular_expression\" and \"replacement_string\"."
+     "Return the answer as a json object with two string fields\
+ labelled \"regular_expression\" and \"replacement_string\".")))
 
 ;; Message prompts
 (defun nalec-insert-prompt-text (desc)
@@ -54,10 +79,7 @@ INSTR contains instructions and ORIGINAL is the original block of text."
 INSTR contains instructions for building the regexp and replacement text."
   (format "I am working on a file in emacs %s.\
  I would like to carry out the following action using regular expression\
- search and replace: %s.
- Generate both the regular expression string and replacement string.\
- Return the answer as a json object with two string fields labelled\
- \"regular_expression\" and \"replacement_string\"."
+ search and replace: %s."
 	  major-mode
 	  instr))
 
@@ -73,7 +95,7 @@ DESC is a string description of the text to be inserted."
   (interactive "sInsert text matching description: ")
   (when (not (string-empty-p desc))
     (let* ((prompt (llm-make-chat-prompt (nalec-insert-prompt-text desc)
-					 :context nalec-insert-prompt-context
+					 :context (nalec-insert-prompt-context)
 					 :temperature 0.1))
 	   (buffer (current-buffer))
 	   (pt (point))
@@ -98,7 +120,7 @@ the selected region."
   (let* ((original (buffer-substring-no-properties
 		    (region-beginning) (region-end)))
 	 (prompt (llm-make-chat-prompt (nalec-replace-prompt-text instr original)
-				       :context nalec-insert-prompt-context
+				       :context (nalec-insert-prompt-context)
 				       :temperature 0.1))
 	 (_x (delete-region (region-beginning) (region-end)))
 	 (llm-request (llm-chat-streaming-to-point
@@ -113,10 +135,15 @@ the selected region."
     (setq nalec-command-status 'in-progress)
     (setq nalec-most-recent-prompt prompt)))
 
+(defun nalec--extract-json (str)
+  (defun extract-json (str)
+  (string-match "```.*\n\\(.*?\\)\n```" str)
+  (json-parse-string (match-string 1 str))))
+
 (defun nalec--handle-regexp-response (resp)
   "Callback function for `nalec-regexp'.
 Argument RESP is the response from the llm."
-  (let ((resp-object (json-parse-string resp)))
+  (let ((resp-object (nalec--extract-json resp)))
     (setq nalec-command-status 'finished)
     (query-replace-regexp (gethash "regular_expression" resp-object)
 			  (gethash "replacement_string" resp-object))))
@@ -130,6 +157,7 @@ passed to `query-replace-regexp'."
   (let* ((prompt
 	  (llm-make-chat-prompt
 	   (nalec-regexp-prompt-text instr)
+	   :context (nalec-regexp-prompt-context)
 	   :temperature 0.1
 	   :non-standard-params ;; NB: Specific to openai
 	   `(("response_format" .
