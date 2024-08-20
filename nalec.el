@@ -1,7 +1,7 @@
 ;;; nalec.el --- NAtural Language Commands for Emacs -*- lexical-binding: t; -*-
 
 ;;; Commentary:
-;; This file defines several interactive functions that take natural language
+;; This file defines some interactive functions that take natural language
 ;; instructions as input.  These are processed using large language models via
 ;; the llm library.
 
@@ -27,7 +27,7 @@
   (let ((make-provider-function)))
   (apply
    (pcase nalec-provider-type
-     ('none (error "Set an llm provider in options to use nalec"))
+     ('none (error "Set an llm provider type in options to use nalec"))
      ('openai (require 'llm-openai) 'make-llm-openai)
      ('openai-compatible (require 'llm-openai) 'make-llm-openai-compatible)
      ('gemini (require 'llm-gemini) 'make-llm-gemini)
@@ -143,6 +143,7 @@ DESC is a string description of the text to be inserted."
       (setq nalec-most-recent-command 'nalec-insert)
       (setq nalec-command-status 'in-progress)
       (setq nalec-most-recent-prompt prompt)
+      (message "Requesting insertion text from llm...")
       (setq nalec-most-recent-request
 	    (llm-chat-streaming
 	     (nalec-provider)
@@ -171,6 +172,7 @@ the selected region."
     (setq nalec-most-recent-command 'nalec-replace)
     (setq nalec-command-status 'in-progress)
     (setq nalec-most-recent-prompt prompt)
+    (message "Requesting replacement text from llm...")
     (setq nalec-most-recent-request
 	  (llm-chat-streaming
 	   (nalec-provider)
@@ -179,7 +181,7 @@ the selected region."
 	   (lambda (text)
 	     (nalec--insert-callback text)
 	     (message
-	      "Finished nalec replace region. %s characters changed"
+	      "Finished nalec replace region with %s characters changed"
 	      (string-distance original text))
 	     (setq nalec-command-status 'finished))
 	   #'nalec--error-callback))))
@@ -196,7 +198,7 @@ Argument RESP is the response from the llm."
 			      (point-min)
 			      (point-max))
       (invalid-regexp
-       (message "Invalid regexp returned, reason" (error-message-string err))
+       (message "Invalid regexp received: %s" (error-message-string err))
        (setq nalec-command-status 'regexp-format-error)))))
 
 (defun nalec-regexp (instr)
@@ -231,7 +233,8 @@ INSTR contains natural language instructions to be added to the chat."
 	(nalec-redo-prompt-text instr))
        (setq nalec-command-status 'in-progress)
        (delete-region nalec-most-recent-start nalec-most-recent-end)
-       (llm-chat-streaming
+       (message "Sent redo instructions to llm...")
+       (setq nalec-most-recent-request (llm-chat-streaming
 	(nalec-provider)
 	nalec-most-recent-prompt
 	#'nalec--insert-callback
@@ -239,7 +242,7 @@ INSTR contains natural language instructions to be added to the chat."
 	  (nalec--insert-callback text)
 	  (message "Finished nalec redo")
 	  (setq nalec-command-status 'finished))
-	#'nalec--error-callback))
+	#'nalec--error-callback)))
       ('nalec-regexp
        (llm-chat-prompt-append-response
 	nalec-most-recent-prompt
