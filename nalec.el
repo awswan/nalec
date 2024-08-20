@@ -217,7 +217,7 @@ passed to `query-replace-regexp'."
 				      #'nalec--handle-regexp-response
 				      #'nalec--error-callback)))
     (setq nalec-command-status 'in-progress)
-    (setq nalec-most-recent-command 'nalec-regexp-replace)
+    (setq nalec-most-recent-command 'nalec-regexp)
     (setq nalec-most-recent-prompt prompt)
     (setq nalec-most-recent-request llm-request)))
 
