@@ -1,4 +1,4 @@
-;;; nalec.el --- A NAtural Language Commands for Emacs -*- lexical-binding: t; -*-
+;;; nalec.el --- NAtural Language Commands for Emacs -*- lexical-binding: t; -*-
 
 ;;; Commentary:
 ;; This file defines several interactive functions that take natural language
