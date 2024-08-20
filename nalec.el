@@ -10,7 +10,7 @@
 (require 'llm)
 (require 'llm-openai)
 
-(defgroup nalec nil "NAtural Language Commander for Emacs (nalec)." :group 'external)
+(defgroup nalec nil "NAtural Language Commands for Emacs (nalec)." :group 'external)
 (defcustom nalec-openai-api-key "" "A valid OpenAI API key." :type 'string)
 (defcustom nalec-openai-model "gpt-4o-mini" "OpenAI model to use for nalec." :type 'string)
 
