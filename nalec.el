@@ -1,5 +1,4 @@
-;;; nalec.el --- A NAtural Language Commander for Emacs
-;; -*- lexical-binding: t; -*-
+;;; nalec.el --- A NAtural Language Commander for Emacs -*- lexical-binding: t; -*-
 
 ;;; Commentary:
 ;; This file defines several interactive functions that take natural language
@@ -15,10 +14,13 @@
 (defcustom nalec-openai-api-key "" "A valid OpenAI API key." :type 'string)
 (defcustom nalec-openai-model "gpt-4o-mini" "OpenAI model to use for nalec." :type 'string)
 
-(make-variable-buffer-local 'nalec-command-status)
-(make-variable-buffer-local 'nalec-most-recent-command)
-(make-variable-buffer-local 'nalec-most-recent-prompt)
-(make-variable-buffer-local 'nalec-most-recent-request)
+(defvar nalec-command-status)
+(defvar nalec-most-recent-command)
+(defvar nalec-most-recent-prompt)
+(defvar nalec-most-recent-request)
+(defvar nalec-most-recent-start (make-marker))
+(defvar nalec-most-recent-end (make-marker))
+(set-marker-insertion-type nalec-most-recent-end t)
 
 (defvar nalec-turbo-mode nil)
 (defun nalec-toggle-turbo-mode ()
@@ -41,19 +43,21 @@
    (if nalec-turbo-mode
        "Briefly explain your reasoning and then enclose the text\
  to insert in a code block."
-   "Do not include explanation.")))
+   "Enclose the text to be inserted inside a code block. Do not include explanation.")))
 
 (defun nalec-regexp-prompt-context ()
   (concat
-   "You assist the user by generating emacs compatible regular expression\
- and replace strings suitable for `replace-regexp' to carry out their\
- tasks. "
+   "You assist the user by generating emacs regular expression\
+ and replacement strings to carry out their tasks.\n"
    (if nalec-turbo-mode
        "Briefly explain your reasoning and then give the regular\
  expression and replace string as a json object with two string fields\
- labelled \"regular_expression\" and \"replacement_string\"."
+ labelled \"regular_expression\" and \"replacement_string\". "
      "Return the answer as a json object with two string fields\
- labelled \"regular_expression\" and \"replacement_string\".")))
+ labelled \"regular_expression\" and \"replacement_string\". ")
+   "The regexp must be in valid emacs regexp format. For example to\
+ match a whitespace character use `\s-` and to match `{` and `{`\
+ include them directly without backslash."))
 
 ;; Message prompts
 (defun nalec-insert-prompt-text (desc)
@@ -89,27 +93,47 @@ INSTR contains natural language instructions."
   (format "Your last reply was not quite right.\
  Please redo according to the following instructions: %s" instr))
 
+(defun nalec--extract-codeblock (str)
+  (string-match ".*```.*?\n\\(\\([^`]`\\{,2\\}\\)*?\\)\\(```\\|\\'\\)" str)
+  (or (match-string 1 str) "Generating text..."))
+
+(defun nalec--insert-callback (text)
+  (with-current-buffer (marker-buffer nalec-most-recent-start)
+    (save-excursion
+      (goto-char nalec-most-recent-start)
+      (delete-region nalec-most-recent-start nalec-most-recent-end)
+      (insert (nalec--extract-codeblock text))))
+  (if (and (eq (current-buffer) (marker-buffer nalec-most-recent-start))
+           (>= (point) nalec-most-recent-start) (<= (point) nalec-most-recent-end))
+	(goto-char nalec-most-recent-end)))
+
+(defun nalec--error-callback (_ msg)
+  (message (format "An error occured during nalec command: %s" msg))
+  (setq nalec-command-status 'fail))
+
 (defun nalec-insert (desc)
   "Insert text based on natural language instructions.
 DESC is a string description of the text to be inserted."
   (interactive "sInsert text matching description: ")
   (when (not (string-empty-p desc))
-    (let* ((prompt (llm-make-chat-prompt (nalec-insert-prompt-text desc)
+    (let ((prompt (llm-make-chat-prompt (nalec-insert-prompt-text desc)
 					 :context (nalec-insert-prompt-context)
-					 :temperature 0.1))
-	   (buffer (current-buffer))
-	   (pt (point))
-	   (llm-request (llm-chat-streaming-to-point
-			 (nalec-provider)
-			 prompt
-			 buffer
-			 pt
-			 (lambda () (message "Finished nalec insert")
-			   (setq nalec-command-status 'finished)))))
+					 :temperature 0.1)))
+      (set-marker nalec-most-recent-start (point))
+      (set-marker nalec-most-recent-end (point))
       (setq nalec-most-recent-command 'nalec-insert)
       (setq nalec-command-status 'in-progress)
       (setq nalec-most-recent-prompt prompt)
-      (setq nalec-most-recent-request llm-request))))
+      (setq nalec-most-recent-request
+	    (llm-chat-streaming
+	     (nalec-provider)
+	     prompt
+	     #'nalec--insert-callback
+	     (lambda (text)
+	       (nalec--insert-callback text)
+	       (message "Finished nalec insert")
+	       (setq nalec-command-status 'finished))
+	     #'nalec--error-callback)))))
 
 (defun nalec-replace (instr)
   "Replace selected region based on natural language instructions.
@@ -121,32 +145,34 @@ the selected region."
 		    (region-beginning) (region-end)))
 	 (prompt (llm-make-chat-prompt (nalec-replace-prompt-text instr original)
 				       :context (nalec-insert-prompt-context)
-				       :temperature 0.1))
-	 (_x (delete-region (region-beginning) (region-end)))
-	 (llm-request (llm-chat-streaming-to-point
-		       (nalec-provider)
-		       prompt
-		       (current-buffer)
-		       (point)
-		       (lambda () (message "Finished nalec replace region")
-			 (setq nalec-command-status 'finished)))))
+				       :temperature 0.1)))
+    (set-marker nalec-most-recent-start (region-beginning))
+    (set-marker nalec-most-recent-end (region-end))
+    (delete-region (region-beginning) (region-end))
     (setq nalec-most-recent-command 'nalec-replace)
-    (setq nalec-most-recent-request llm-request)
     (setq nalec-command-status 'in-progress)
-    (setq nalec-most-recent-prompt prompt)))
-
-(defun nalec--extract-json (str)
-  (defun extract-json (str)
-  (string-match "```.*\n\\(.*?\\)\n```" str)
-  (json-parse-string (match-string 1 str))))
+    (setq nalec-most-recent-prompt prompt)
+    (setq nalec-most-recent-request
+	  (llm-chat-streaming
+	   (nalec-provider)
+	   prompt
+	   #'nalec--insert-callback
+	   (lambda (text)
+	     (nalec--insert-callback text)
+	     (message "Finished nalec replace region")
+	     (setq nalec-command-status 'finished))
+	   #'nalec--error-callback))))
 
 (defun nalec--handle-regexp-response (resp)
   "Callback function for `nalec-regexp'.
 Argument RESP is the response from the llm."
-  (let ((resp-object (nalec--extract-json resp)))
+  (let ((resp-object (json-parse-string (nalec--extract-codeblock resp))))
     (setq nalec-command-status 'finished)
     (query-replace-regexp (gethash "regular_expression" resp-object)
-			  (gethash "replacement_string" resp-object))))
+			  (gethash "replacement_string" resp-object)
+			  nil
+			  (point-min)
+			  (point-max))))
 
 (defun nalec-regexp (instr)
   "Carry out regexp search and replace based on natural language instructions.
@@ -158,16 +184,11 @@ passed to `query-replace-regexp'."
 	  (llm-make-chat-prompt
 	   (nalec-regexp-prompt-text instr)
 	   :context (nalec-regexp-prompt-context)
-	   :temperature 0.1
-	   :non-standard-params ;; NB: Specific to openai
-	   `(("response_format" .
-	      ,(let ((table (make-hash-table :test 'equal)))
-		(puthash "type" "json_object" table)
-		table)))))
+	   :temperature 0.1))
 	 (llm-request (llm-chat-async (nalec-provider)
 				      prompt
 				      #'nalec--handle-regexp-response
-				      (lambda (_ msg) (error msg)))))
+				      #'nalec--error-callback)))
     (setq nalec-command-status 'in-progress)
     (setq nalec-most-recent-command 'nalec-regexp-replace)
     (setq nalec-most-recent-prompt prompt)
@@ -184,13 +205,16 @@ INSTR contains natural language instructions to be added to the chat."
 	nalec-most-recent-prompt
 	(nalec-redo-prompt-text instr))
        (setq nalec-command-status 'in-progress)
-       (llm-chat-streaming-to-point
+       (delete-region (nalec-most-recent-start) (nalec-most-recent-end))
+       (llm-chat-streaming
 	(nalec-provider)
 	nalec-most-recent-prompt
-	(current-buffer)
-	(point)
-	(lambda () (message "Finished nalec redo")
-	  (setq nalec-command-status 'finished))))
+	#'nalec--insert-callback
+	(lambda (text)
+	  (nalec--insert-callback text)
+	  (message "Finished nalec redo")
+	  (setq nalec-command-status 'finished))
+	#'nalec--error-callback))
       ('nalec-regexp
        (llm-chat-prompt-append-response
 	nalec-most-recent-prompt
@@ -199,7 +223,7 @@ INSTR contains natural language instructions to be added to the chat."
        (llm-chat-async (nalec-provider)
 		       nalec-most-recent-prompt
 		       #'nalec--handle-regexp-response
-		       (lambda (_ msg) (error msg)))))))
+		       #'nalec--error-callback)))))
 
 (defun nalec-cancel ()
   "Cancel the most recent nalec command."
