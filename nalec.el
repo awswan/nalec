@@ -13,6 +13,7 @@
 (defgroup nalec nil "NAtural Language Commands for Emacs (nalec)." :group 'external)
 (defcustom nalec-openai-api-key "" "A valid OpenAI API key." :type 'string)
 (defcustom nalec-openai-model "gpt-4o-mini" "OpenAI model to use for nalec." :type 'string)
+(defcustom nalec-temperature 0.2 "Temperature to use in prompts." :type 'float)
 
 (defvar nalec-command-status)
 (defvar nalec-most-recent-command)
@@ -94,8 +95,9 @@ INSTR contains natural language instructions."
  Please redo according to the following instructions: %s" instr))
 
 (defun nalec--extract-codeblock (str)
+  ;; finds the last codeblock in str
   (string-match ".*```.*?\n\\(\\([^`]`\\{,2\\}\\)*?\\)\\(```\\|\\'\\)" str)
-  (or (match-string 1 str) "Generating text..."))
+  (or (match-string 1 str) ""))
 
 (defun nalec--insert-callback (text)
   (with-current-buffer (marker-buffer nalec-most-recent-start)
@@ -108,8 +110,8 @@ INSTR contains natural language instructions."
 	(goto-char nalec-most-recent-end)))
 
 (defun nalec--error-callback (_ msg)
-  (message (format "An error occured during nalec command: %s" msg))
-  (setq nalec-command-status 'fail))
+  (message "An llm error occured during nalec command: %s" msg)
+  (setq nalec-command-status 'llm-error))
 
 (defun nalec-insert (desc)
   "Insert text based on natural language instructions.
@@ -118,7 +120,7 @@ DESC is a string description of the text to be inserted."
   (when (not (string-empty-p desc))
     (let ((prompt (llm-make-chat-prompt (nalec-insert-prompt-text desc)
 					 :context (nalec-insert-prompt-context)
-					 :temperature 0.1)))
+					 :temperature nalec-temperature)))
       (set-marker nalec-most-recent-start (point))
       (set-marker nalec-most-recent-end (point))
       (setq nalec-most-recent-command 'nalec-insert)
@@ -145,7 +147,7 @@ the selected region."
 		    (region-beginning) (region-end)))
 	 (prompt (llm-make-chat-prompt (nalec-replace-prompt-text instr original)
 				       :context (nalec-insert-prompt-context)
-				       :temperature 0.1)))
+				       :temperature nalec-temperature)))
     (set-marker nalec-most-recent-start (region-beginning))
     (set-marker nalec-most-recent-end (region-end))
     (delete-region (region-beginning) (region-end))
@@ -159,7 +161,9 @@ the selected region."
 	   #'nalec--insert-callback
 	   (lambda (text)
 	     (nalec--insert-callback text)
-	     (message "Finished nalec replace region")
+	     (message
+	      "Finished nalec replace region. %s characters changed"
+	      (string-distance original text))
 	     (setq nalec-command-status 'finished))
 	   #'nalec--error-callback))))
 
@@ -168,11 +172,15 @@ the selected region."
 Argument RESP is the response from the llm."
   (let ((resp-object (json-parse-string (nalec--extract-codeblock resp))))
     (setq nalec-command-status 'finished)
-    (query-replace-regexp (gethash "regular_expression" resp-object)
-			  (gethash "replacement_string" resp-object)
-			  nil
-			  (point-min)
-			  (point-max))))
+    (condition-case err
+	(query-replace-regexp (gethash "regular_expression" resp-object)
+			      (gethash "replacement_string" resp-object)
+			      nil
+			      (point-min)
+			      (point-max))
+      (invalid-regexp
+       (message "Invalid regexp returned, reason" (error-message-string err))
+       (setq nalec-command-status 'regexp-format-error)))))
 
 (defun nalec-regexp (instr)
   "Carry out regexp search and replace based on natural language instructions.
@@ -184,7 +192,7 @@ passed to `query-replace-regexp'."
 	  (llm-make-chat-prompt
 	   (nalec-regexp-prompt-text instr)
 	   :context (nalec-regexp-prompt-context)
-	   :temperature 0.1))
+	   :temperature nalec-temperature))
 	 (llm-request (llm-chat-async (nalec-provider)
 				      prompt
 				      #'nalec--handle-regexp-response
