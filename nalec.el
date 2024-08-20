@@ -205,7 +205,7 @@ INSTR contains natural language instructions to be added to the chat."
 	nalec-most-recent-prompt
 	(nalec-redo-prompt-text instr))
        (setq nalec-command-status 'in-progress)
-       (delete-region (nalec-most-recent-start) (nalec-most-recent-end))
+       (delete-region nalec-most-recent-start nalec-most-recent-end)
        (llm-chat-streaming
 	(nalec-provider)
 	nalec-most-recent-prompt
