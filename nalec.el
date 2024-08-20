@@ -8,12 +8,33 @@
 ;;; Code:
 
 (require 'llm)
-(require 'llm-openai)
 
 (defgroup nalec nil "NAtural Language Commands for Emacs (nalec)." :group 'external)
-(defcustom nalec-openai-api-key "" "A valid OpenAI API key." :type 'string)
-(defcustom nalec-openai-model "gpt-4o-mini" "OpenAI model to use for nalec." :type 'string)
 (defcustom nalec-temperature 0.2 "Temperature to use in prompts." :type 'float)
+(defcustom nalec-provider-type 'none "Type of llm provider to use."
+  :type '(choice (const :tag "None" none)
+		 (const :tag "OpenAI" openai)
+		 (const :tag "OpenAI compatible" openai-compatible)
+		 (const :tag "Gemini" gemini)
+		 (const :tag "Vertex" vertex)
+		 (const :tag "Claude" claude)
+		 (const :tag "Ollama" ollama)))
+(defcustom nalec-provider-options '() "Options for llm provider"
+  :type '(plist :value-type string :tag "Options for llm provider"
+		:options (:key :chat-model)))
+
+(defun nalec-provider ()
+  (let ((make-provider-function)))
+  (apply
+   (pcase nalec-provider-type
+     ('none (error "Set an llm provider in options to use nalec"))
+     ('openai (require 'llm-openai) 'make-llm-openai)
+     ('openai-compatible (require 'llm-openai) 'make-llm-openai-compatible)
+     ('gemini (require 'llm-gemini) 'make-llm-gemini)
+     ('vertex (require 'llm-vertex) 'make-llm-vertex)
+     ('claude (require 'llm-claude) 'make-llm-claude)
+     ('ollama (require 'llm-ollama) 'make-llm-ollama))
+   nalec-provider-options))
 
 (defvar nalec-command-status)
 (defvar nalec-most-recent-command)
@@ -31,10 +52,6 @@
    (if nalec-turbo-mode
        "Nalec turbo mode enabled"
      "Nalec turbo mode disabled")))
-
-(defun nalec-provider ()
-  "Generate an llm-provider.  Currently only works for openai."
-  (make-llm-openai :key nalec-openai-api-key :chat-model nalec-openai-model))
 
 ;; Same context prompt is used for both inserting and replacing
 (defun nalec-insert-prompt-context ()
