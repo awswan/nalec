@@ -24,7 +24,6 @@
 		:options (:key :chat-model)))
 
 (defun nalec-provider ()
-  (let ((make-provider-function)))
   (apply
    (pcase nalec-provider-type
      ('none (error "Set an llm provider type in options to use nalec"))
