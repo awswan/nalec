@@ -172,6 +172,9 @@ the selected region."
 	 (prompt (llm-make-chat-prompt (nalec-replace-prompt-text instr original)
 				       :context (nalec-insert-prompt-context)
 				       :temperature nalec-temperature)))
+    (set-marker nalec-most-recent-start (region-beginning))
+    (set-marker nalec-most-recent-end (region-end))
+    (delete-region (region-beginning) (region-end))
     (message "Requesting replacement text from llm...")
     (nalec-insert-at-point
      prompt
