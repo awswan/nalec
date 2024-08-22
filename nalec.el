@@ -89,7 +89,7 @@ Generate text to insert matching the following description: %s."
 (defun nalec-replace-prompt-text (instr original)
   "Generate user prompt for `nalec-replace'.
 INSTR contains instructions and ORIGINAL is the original block of text."
-  (format "I am working on a file in %s. Alter\
+  (format "I am working on a file in %s. Adjust\
  the text below according to these instructions: %s.\n\n%s"
 	  major-mode
 	  instr
@@ -178,6 +178,20 @@ the selected region."
      (lambda (text) (message
 		 "Finished nalec replace region with %s characters changed"
 		 (string-distance original text))))))
+
+(defun nalec-yank (instr)
+  "Get text from kill ring, adjust it according to instructions, and insert.
+INSTR is a string containing the natural language instructions."
+  (interactive
+   (list (read-string "Adapt yank by (default \"whatever is appropriate\"): "
+		 nil 'minibuffer-history
+		 "whatever is appropriate" t)))
+  (message "Sending text to llm...")
+  (nalec-insert-at-point
+   (llm-make-chat-prompt (nalec-replace-prompt-text instr (current-kill 0))
+			 :context (nalec-insert-prompt-context)
+			 :temperature nalec-temperature)
+   (lambda (_) (message "Finished nalec yank"))))
 
 (defun nalec--handle-regexp-response (resp)
   "Callback function for `nalec-regexp'.
