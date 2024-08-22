@@ -129,61 +129,55 @@ INSTR contains natural language instructions."
   (message "An llm error occured during nalec command: %s" msg)
   (setq nalec-command-status 'llm-error))
 
+(defun nalec-insert-at-point (prompt final-callback)
+  (set-marker nalec-most-recent-start (point))
+  (set-marker nalec-most-recent-end (point))
+  (setq nalec-most-recent-command 'nalec-insert)
+  (setq nalec-command-status 'in-progress)
+  (setq nalec-most-recent-prompt prompt)
+  (setq nalec-most-recent-request
+	(llm-chat-streaming
+	 (nalec-provider)
+	 prompt
+	 #'nalec--insert-callback
+	 (lambda (text)
+	   (nalec--insert-callback text)
+	   (setq nalec-command-status 'finished)
+	   (funcall final-callback text))
+	 #'nalec--error-callback)))
+
 (defun nalec-insert (desc)
   "Insert text based on natural language instructions.
 DESC is a string description of the text to be inserted."
-  (interactive "sInsert text matching description: ")
-  (when (not (string-empty-p desc))
-    (let ((prompt (llm-make-chat-prompt (nalec-insert-prompt-text desc)
-					 :context (nalec-insert-prompt-context)
-					 :temperature nalec-temperature)))
-      (set-marker nalec-most-recent-start (point))
-      (set-marker nalec-most-recent-end (point))
-      (setq nalec-most-recent-command 'nalec-insert)
-      (setq nalec-command-status 'in-progress)
-      (setq nalec-most-recent-prompt prompt)
-      (message "Requesting insertion text from llm...")
-      (setq nalec-most-recent-request
-	    (llm-chat-streaming
-	     (nalec-provider)
-	     prompt
-	     #'nalec--insert-callback
-	     (lambda (text)
-	       (nalec--insert-callback text)
-	       (message "Finished nalec insert")
-	       (setq nalec-command-status 'finished))
-	     #'nalec--error-callback)))))
+  (interactive "MInsert text matching description: ")
+  (when (string-empty-p desc) (error "Instructions required for nalec insert"))
+  (message "Requesting insertion text from llm...")
+  (nalec-insert-at-point
+   (llm-make-chat-prompt (nalec-insert-prompt-text desc)
+			 :context (nalec-insert-prompt-context)
+			 :temperature nalec-temperature)
+   (lambda (_) (message "Finished nalec insert"))))
 
 (defun nalec-replace (instr)
   "Replace selected region based on natural language instructions.
 INSTR is a string containing natural language instructions for modifying
 the selected region."
-  (interactive "sReplace region by: ")
-  (when (string-empty-p instr) (setq instr "whatever is appropriate"))
+  (interactive
+   (list (read-string "Replace region by (default \"whatever is appropriate\"): "
+		 nil 'minibuffer-history
+		 "whatever is appropriate" t)))
+  (message "got instructions %s" instr)
   (let* ((original (buffer-substring-no-properties
 		    (region-beginning) (region-end)))
 	 (prompt (llm-make-chat-prompt (nalec-replace-prompt-text instr original)
 				       :context (nalec-insert-prompt-context)
 				       :temperature nalec-temperature)))
-    (set-marker nalec-most-recent-start (region-beginning))
-    (set-marker nalec-most-recent-end (region-end))
-    (delete-region (region-beginning) (region-end))
-    (setq nalec-most-recent-command 'nalec-replace)
-    (setq nalec-command-status 'in-progress)
-    (setq nalec-most-recent-prompt prompt)
     (message "Requesting replacement text from llm...")
-    (setq nalec-most-recent-request
-	  (llm-chat-streaming
-	   (nalec-provider)
-	   prompt
-	   #'nalec--insert-callback
-	   (lambda (text)
-	     (nalec--insert-callback text)
-	     (message
-	      "Finished nalec replace region with %s characters changed"
-	      (string-distance original text))
-	     (setq nalec-command-status 'finished))
-	   #'nalec--error-callback))))
+    (nalec-insert-at-point
+     prompt
+     (lambda (text) (message
+		 "Finished nalec replace region with %s characters changed"
+		 (string-distance original text))))))
 
 (defun nalec--handle-regexp-response (resp)
   "Callback function for `nalec-regexp'.
