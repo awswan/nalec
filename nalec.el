@@ -9,9 +9,21 @@
 
 (require 'llm)
 
+(defun nalec--require-provider (symbol)
+  (pcase symbol
+     ('openai (require 'llm-openai))
+     ('openai-compatible (require 'llm-openai))
+     ('gemini (require 'llm-gemini))
+     ('vertex (require 'llm-vertex))
+     ('claude (require 'llm-claude))
+     ('ollama (require 'llm-ollama))))
+
 (defgroup nalec nil "NAtural Language Commands for Emacs (nalec)." :group 'external)
 (defcustom nalec-temperature 0.2 "Temperature to use in prompts." :type 'float)
 (defcustom nalec-provider-type 'none "Type of llm provider to use."
+  :set (lambda (symbol value)
+	 (nalec--require-provider value)
+	 (set-default-toplevel-value symbol value))
   :type '(choice (const :tag "None" none)
 		 (const :tag "OpenAI" openai)
 		 (const :tag "OpenAI compatible" openai-compatible)
@@ -27,12 +39,12 @@
   (apply
    (pcase nalec-provider-type
      ('none (error "Set an llm provider type in options to use nalec"))
-     ('openai (require 'llm-openai) 'make-llm-openai)
-     ('openai-compatible (require 'llm-openai) 'make-llm-openai-compatible)
-     ('gemini (require 'llm-gemini) 'make-llm-gemini)
-     ('vertex (require 'llm-vertex) 'make-llm-vertex)
-     ('claude (require 'llm-claude) 'make-llm-claude)
-     ('ollama (require 'llm-ollama) 'make-llm-ollama))
+     ('openai 'make-llm-openai)
+     ('openai-compatible 'make-llm-openai-compatible)
+     ('gemini 'make-llm-gemini)
+     ('vertex 'make-llm-vertex)
+     ('claude 'make-llm-claude)
+     ('ollama 'make-llm-ollama))
    nalec-provider-options))
 
 (defvar nalec-command-status)
@@ -43,7 +55,7 @@
 (defvar nalec-insert-session-mode nil)
 (defvar nalec-region-start (make-marker))
 (defvar nalec-region-end (make-marker))
-(set-marker-insertion-type nalec-most-recent-end t)
+(set-marker-insertion-type nalec-region-end t)
 
 (defvar nalec-turbo-mode nil)
 (defun nalec-toggle-turbo-mode ()
@@ -118,14 +130,14 @@ INSTR contains natural language instructions."
   (or (match-string 1 str) ""))
 
 (defun nalec--insert-callback (text)
-  (with-current-buffer (marker-buffer nalec-most-recent-start)
+  (with-current-buffer (marker-buffer nalec-region-start)
     (save-excursion
-      (goto-char nalec-most-recent-start)
-      (delete-region nalec-most-recent-start nalec-most-recent-end)
+      (goto-char nalec-region-start)
+      (delete-region nalec-region-start nalec-region-end)
       (insert (nalec--extract-codeblock text))))
-  (if (and (eq (current-buffer) (marker-buffer nalec-most-recent-start))
-           (>= (point) nalec-most-recent-start) (<= (point) nalec-most-recent-end))
-	(goto-char nalec-most-recent-end)))
+  (if (and (eq (current-buffer) (marker-buffer nalec-region-start))
+           (>= (point) nalec-region-start) (<= (point) nalec-region-end))
+	(goto-char nalec-region-end)))
 
 (defun nalec--error-callback (_ msg)
   (message "An llm error occured during nalec command: %s" msg)
@@ -141,8 +153,8 @@ INSTR contains natural language instructions."
   (setq nalec-insert-session-mode nil))
 
 (defun nalec-insert-at-point (prompt-text final-callback)
-  (set-marker nalec-most-recent-start (point))
-  (set-marker nalec-most-recent-end (point))
+  (set-marker nalec-region-start (point))
+  (set-marker nalec-region-end (point))
   (setq nalec-most-recent-command 'nalec-insert)
   (setq nalec-command-status 'in-progress)
   (if (and nalec-insert-session-mode nalec-insert-prompt)
@@ -181,8 +193,8 @@ the selected region."
   (message "got instructions %s" instr)
   (let ((original (buffer-substring-no-properties
 		    (region-beginning) (region-end))))
-    (set-marker nalec-most-recent-start (region-beginning))
-    (set-marker nalec-most-recent-end (region-end))
+    (set-marker nalec-region-start (region-beginning))
+    (set-marker nalec-region-end (region-end))
     (delete-region (region-beginning) (region-end))
     (message "Requesting replacement text from llm...")
     (nalec-insert-at-point
@@ -248,7 +260,7 @@ INSTR contains natural language instructions to be added to the chat."
 	nalec-insert-prompt
 	(nalec-redo-prompt-text instr))
        (setq nalec-command-status 'in-progress)
-       (delete-region nalec-most-recent-start nalec-most-recent-end)
+       (delete-region nalec-region-start nalec-region-end)
        (message "Sent redo instructions to llm...")
        (setq nalec-most-recent-request
 	     (llm-chat-streaming
