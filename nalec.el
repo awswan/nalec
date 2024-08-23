@@ -94,20 +94,37 @@
 (defun nalec-insert-prompt-text (desc)
   "Generate user prompt for `nalec-insert'.
 DESC is a description of the text to insert."
-  (format "I am working on a file in %s with %s lines. \
-Generate text to insert matching the following description: %s."
+  (concat
+   (format "I am working on a file in %s with %s lines. \
+Generate text to insert matching the following description: %s\n"
 	  major-mode
 	  (count-lines (point-min) (point-max))
-	  desc))
+	  desc)
+   (when (not (bolp))
+     (concat (if (eolp)
+		 (concat "The text will be inserted at the end of the following line:\n"
+			 (thing-at-point 'line t))
+	       (concat "The text will be inserted in the middle of the line below.\n"
+		       (buffer-substring-no-properties (line-beginning-position) (point))
+		       " YOUR TEXT GOES HERE "
+		       (buffer-substring-no-properties (point) (line-end-position))))
+	     "\nOnly return the text to insert, not the whole line."))))
 
 (defun nalec-replace-prompt-text (instr original)
   "Generate user prompt for `nalec-replace'.
 INSTR contains instructions and ORIGINAL is the original block of text."
-  (format "I am working on a file in %s. Adjust\
- the text below according to these instructions: %s.\n\n%s"
+  (format "I am working on a file in %s. Adjust the text selected from\
+ the current buffer below according to these instructions: %s.\n\n%s"
 	  major-mode
 	  instr
 	  original))
+
+(defun nalec-yank-prompt-text (instr)
+  (format "I am working on a file in %s and about to insert the text below\
+ into the buffer. First adjust it according to these instructions: %s\n\n%s"
+	  major-mode
+	  instr
+	  (current-kill 0)))
 
 (defun nalec-regexp-prompt-text (instr)
   "Generate user prompt for `nalec-regexp'.
@@ -126,7 +143,7 @@ INSTR contains natural language instructions."
 
 (defun nalec--extract-codeblock (str)
   ;; finds the last codeblock in str
-  (string-match ".*```.*?\n\\(\\([^`]`\\{,2\\}\\)*?\\)\\(```\\|\\'\\)" str)
+  (string-match ".*```.*?\n\\(\\([^`]`\\{,2\\}\\)*?\\)\\(\n```\\|\\'\\)" str)
   (or (match-string 1 str) ""))
 
 (defun nalec--insert-callback (text)
@@ -211,7 +228,7 @@ INSTR is a string containing the natural language instructions."
 		 nil 'minibuffer-history
 		 "whatever is appropriate" t)))
   (message "Sending text to llm...")
-  (nalec-insert-at-point (nalec-replace-prompt-text instr (current-kill 0))
+  (nalec-insert-at-point (nalec-yank-prompt-text instr)
 			 (lambda (_) (message "Finished nalec yank"))))
 
 (defun nalec--handle-regexp-response (resp)
