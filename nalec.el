@@ -146,12 +146,13 @@ INSTR contains natural language instructions."
   (string-match ".*```.*?\n\\(\\([^`]`\\{,2\\}\\)*?\\)\\(\n```\\|\\'\\)" str)
   (or (match-string 1 str) ""))
 
-(defun nalec--insert-callback (text)
+(defun nalec--insert-callback (text trailing-newline)
   (with-current-buffer (marker-buffer nalec-region-start)
     (save-excursion
       (goto-char nalec-region-start)
       (delete-region nalec-region-start nalec-region-end)
-      (insert (nalec--extract-codeblock text))))
+      (insert (nalec--extract-codeblock text))
+      (when trailing-newline (insert "\n"))))
   (if (and (eq (current-buffer) (marker-buffer nalec-region-start))
            (>= (point) nalec-region-start) (<= (point) nalec-region-end))
 	(goto-char nalec-region-end)))
@@ -169,7 +170,7 @@ INSTR contains natural language instructions."
   (interactive)
   (setq nalec-insert-session-mode nil))
 
-(defun nalec-insert-at-point (prompt-text final-callback)
+(defun nalec-insert-at-point (prompt-text final-callback trailing-newline)
   (set-marker nalec-region-start (point))
   (set-marker nalec-region-end (point))
   (setq nalec-most-recent-command 'nalec-insert)
@@ -183,9 +184,9 @@ INSTR contains natural language instructions."
 	(llm-chat-streaming
 	 (nalec-provider)
 	 nalec-insert-prompt
-	 #'nalec--insert-callback
+	 (lambda (text) (nalec--insert-callback text nil))
 	 (lambda (text)
-	   (nalec--insert-callback text)
+	   (nalec--insert-callback text trailing-newline)
 	   (setq nalec-command-status 'finished)
 	   (funcall final-callback text))
 	 #'nalec--error-callback)))
@@ -194,17 +195,19 @@ INSTR contains natural language instructions."
   "Insert text based on natural language instructions.
 DESC is a string description of the text to be inserted."
   (interactive "MInsert text matching description: ")
-  (when (string-empty-p desc) (error "Instructions required for nalec insert"))
+  (when (string-empty-p desc) (setq desc "whatever is appropriate"))
   (message "Requesting insertion text from llm...")
   (nalec-insert-at-point (nalec-insert-prompt-text desc)
-			 (lambda (_) (message "Finished nalec insert"))))
+			 (lambda (_)
+			   (message "Finished nalec insert"))
+			 (and (bolp) (eolp))))
 
 (defun nalec-replace (instr)
   "Replace selected region based on natural language instructions.
 INSTR is a string containing natural language instructions for modifying
 the selected region."
   (interactive
-   (list (read-string "Replace region by (default \"whatever is appropriate\"): "
+   (list (read-string "Replace region by: "
 		 nil 'minibuffer-history
 		 "whatever is appropriate" t)))
   (message "got instructions %s" instr)
@@ -218,18 +221,20 @@ the selected region."
      (nalec-replace-prompt-text instr original)
      (lambda (text) (message
 		 "Finished nalec replace region with %s characters changed"
-		 (string-distance original text))))))
+		 (string-distance original text)))
+     t)))
 
 (defun nalec-yank (instr)
   "Get text from kill ring, adjust it according to instructions, and insert.
 INSTR is a string containing the natural language instructions."
   (interactive
-   (list (read-string "Adapt yank by (default \"whatever is appropriate\"): "
+   (list (read-string "Adapt yank by: "
 		 nil 'minibuffer-history
 		 "whatever is appropriate" t)))
   (message "Sending text to llm...")
   (nalec-insert-at-point (nalec-yank-prompt-text instr)
-			 (lambda (_) (message "Finished nalec yank"))))
+			 (lambda (_) (message "Finished nalec yank"))
+			 t))
 
 (defun nalec--handle-regexp-response (resp)
   "Callback function for `nalec-regexp'.
@@ -283,9 +288,9 @@ INSTR contains natural language instructions to be added to the chat."
 	     (llm-chat-streaming
 	      (nalec-provider)
 	      nalec-insert-prompt
-	      #'nalec--insert-callback
+	      (lambda (text) (nalec--insert-callback text nil))
 	      (lambda (text)
-		(nalec--insert-callback text)
+		(nalec--insert-callback text nil)
 		(message "Finished nalec redo")
 		(setq nalec-command-status 'finished))
 	      #'nalec--error-callback)))
