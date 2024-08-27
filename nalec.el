@@ -142,17 +142,26 @@ INSTR contains natural language instructions."
  Please redo according to the following instructions: %s" instr))
 
 (defun nalec--extract-codeblock (str)
-  ;; finds the last codeblock in str
-  (string-match ".*```.*?\n\\(\\([^`]`\\{,2\\}\\)*?\\)\\(\n```\\|\\'\\)" str)
-  (or (match-string 1 str) ""))
+  "Return last codeblock appearing in STR."
+  (let ((current-attempt ())
+	(in-block nil))
+    (dolist (line (split-string str "\r?\n"))
+      (if in-block
+	  (if (string= line "```")
+	      (setq in-block nil)
+	    (push (concat line "\n") current-attempt))
+	(when (string-prefix-p "```" line)
+	  (setq in-block t)
+	  (setq current-attempt ()))))
+    (apply 'concat (reverse current-attempt))))
 
 (defun nalec--insert-callback (text trailing-newline)
   (with-current-buffer (marker-buffer nalec-region-start)
     (save-excursion
       (goto-char nalec-region-start)
       (delete-region nalec-region-start nalec-region-end)
-      (insert (nalec--extract-codeblock text))
-      (when trailing-newline (insert "\n"))))
+      (let ((codeblock (nalec--extract-codeblock text)))
+	(insert (if trailing-newline codeblock (string-trim-right codeblock "\n"))))))
   (if (and (eq (current-buffer) (marker-buffer nalec-region-start))
            (>= (point) nalec-region-start) (<= (point) nalec-region-end))
 	(goto-char nalec-region-end)))
