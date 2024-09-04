@@ -147,7 +147,7 @@ INSTR contains natural language instructions."
 	(in-block nil))
     (dolist (line (split-string str "\r?\n"))
       (if in-block
-	  (if (string= line "```")
+	  (if (string-prefix-p "```" line)
 	      (setq in-block nil)
 	    (push (concat line "\n") current-attempt))
 	(when (string-prefix-p "```" line)
