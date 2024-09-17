@@ -286,6 +286,9 @@ passed to `query-replace-regexp'."
   "Try the last command again with additional instructions.
 INSTR contains natural language instructions to be added to the chat."
   (interactive "sRedo with instructions: ")
+  (when (string-empty-p instr)
+    (setq instr "briefly explain why the previous answer may have been rejected\
+ and then give a corrected version"))
   (when (eq nalec-command-status 'finished)
     (pcase nalec-most-recent-command
       ((or 'nalec-insert 'nalec-replace)
