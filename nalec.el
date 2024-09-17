@@ -34,6 +34,7 @@
 (defcustom nalec-provider-options '() "Options for llm provider"
   :type '(plist :value-type string :tag "Options for llm provider"
 		:options (:key :chat-model)))
+(defcustom nalec-indent-after-insert t "Indent region after inserting text." :type 'boolean)
 
 (defun nalec-provider ()
   (apply
@@ -197,6 +198,7 @@ INSTR contains natural language instructions."
 	 (lambda (text)
 	   (nalec--insert-callback text trailing-newline)
 	   (setq nalec-command-status 'finished)
+	   (when nalec-indent-after-insert (indent-region nalec-region-start nalec-region-end))
 	   (funcall final-callback text))
 	 #'nalec--error-callback)))
 
