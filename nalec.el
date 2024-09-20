@@ -223,7 +223,8 @@ the selected region."
 		 "whatever is appropriate" t)))
   (message "got instructions %s" instr)
   (let ((original (buffer-substring-no-properties
-		    (region-beginning) (region-end))))
+		   (region-beginning) (region-end)))
+	(trailing-newline (member (char-before (region-end)) '(nil ?\n))))
     (set-marker nalec-region-start (region-beginning))
     (set-marker nalec-region-end (region-end))
     (delete-region (region-beginning) (region-end))
@@ -233,7 +234,7 @@ the selected region."
      (lambda (text) (message
 		 "Finished nalec replace region with %s characters changed"
 		 (string-distance original text)))
-     t)))
+     trailing-newline)))
 
 (defun nalec-yank (instr)
   "Get text from kill ring, adjust it according to instructions, and insert.
@@ -245,7 +246,7 @@ INSTR is a string containing the natural language instructions."
   (message "Sending text to llm...")
   (nalec-insert-at-point (nalec-yank-prompt-text instr)
 			 (lambda (_) (message "Finished nalec yank"))
-			 t))
+			 (and (bolp) (eolp))))
 
 (defun nalec--handle-regexp-response (resp)
   "Callback function for `nalec-regexp'.
@@ -296,18 +297,19 @@ INSTR contains natural language instructions to be added to the chat."
 	nalec-insert-prompt
 	(nalec-redo-prompt-text instr))
        (setq nalec-command-status 'in-progress)
-       (delete-region nalec-region-start nalec-region-end)
-       (message "Sent redo instructions to llm...")
-       (setq nalec-most-recent-request
-	     (llm-chat-streaming
-	      (nalec-provider)
-	      nalec-insert-prompt
-	      (lambda (text) (nalec--insert-callback text nil))
-	      (lambda (text)
-		(nalec--insert-callback text nil)
-		(message "Finished nalec redo")
-		(setq nalec-command-status 'finished))
-	      #'nalec--error-callback)))
+       (let ((trailing-newline (member (char-before nalec-region-end) '(nil ?\n))))
+	 (delete-region nalec-region-start nalec-region-end)
+	 (message "Sent redo instructions to llm...")
+	 (setq nalec-most-recent-request
+	       (llm-chat-streaming
+		(nalec-provider)
+		nalec-insert-prompt
+		(lambda (text) (nalec--insert-callback text trailing-newline))
+		(lambda (text)
+		  (nalec--insert-callback text trailing-newline)
+		  (message "Finished nalec redo")
+		  (setq nalec-command-status 'finished))
+		#'nalec--error-callback))))
       ('nalec-regexp
        (llm-chat-prompt-append-response
 	nalec-regexp-prompt
