@@ -127,6 +127,12 @@ INSTR contains instructions and ORIGINAL is the original block of text."
 	  instr
 	  (current-kill 0)))
 
+(defun nalec-yank-image-prompt-text (instr)
+  (format "I am working on a file in %s. Use the attached image\
+ to generate text to insert according to the following instructions: %s"
+	  major-mode
+	  instr))
+
 (defun nalec-regexp-prompt-text (instr)
   "Generate user prompt for `nalec-regexp'.
 INSTR contains instructions for building the regexp and replacement text."
@@ -180,14 +186,14 @@ INSTR contains natural language instructions."
   (interactive)
   (setq nalec-insert-session-mode nil))
 
-(defun nalec-insert-at-point (prompt-text final-callback trailing-newline)
+(defun nalec-insert-at-point (prompt final-callback trailing-newline)
   (set-marker nalec-region-start (point))
   (set-marker nalec-region-end (point))
   (setq nalec-most-recent-command 'nalec-insert)
   (setq nalec-command-status 'in-progress)
   (if (and nalec-insert-session-mode nalec-insert-prompt)
-      (llm-chat-prompt-append-response nalec-insert-prompt prompt-text)
-    (setq nalec-insert-prompt (llm-make-chat-prompt prompt-text
+      (llm-chat-prompt-append-response nalec-insert-prompt prompt)
+    (setq nalec-insert-prompt (llm-make-chat-prompt prompt
 						    :context (nalec-insert-prompt-context)
 						    :temperature nalec-temperature)))
   (setq nalec-most-recent-request
@@ -247,6 +253,18 @@ INSTR is a string containing the natural language instructions."
   (nalec-insert-at-point (nalec-yank-prompt-text instr)
 			 (lambda (_) (message "Finished nalec yank"))
 			 (and (bolp) (eolp))))
+
+(defun nalec-yank-image ()
+  (interactive)
+  (let ((image (gui-get-selection 'CLIPBOARD 'image/png))
+	(instr (read-string "Adapt image by: " nil 'minibuffer-history
+			    "whatever is appropriate" t)))
+    (message "Sending data to llm...")
+    (nalec-insert-at-point
+     `(((text . ,(nalec-yank-image-prompt-text instr))
+       (image . ,image)))
+     (lambda (_) (message "Finished nalec yank image"))
+     (and (bolp) (eolp)))))
 
 (defun nalec--handle-regexp-response (resp)
   "Callback function for `nalec-regexp'.
