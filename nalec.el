@@ -193,7 +193,7 @@ INSTR contains natural language instructions."
   (setq nalec-command-status 'in-progress)
   (if (and nalec-insert-session-mode nalec-insert-prompt)
       (llm-chat-prompt-append-response nalec-insert-prompt prompt)
-    (setq nalec-insert-prompt (llm-make-chat-prompt prompt
+    (setq nalec-insert-prompt (llm-make-chat-prompt (list prompt)
 						    :context (nalec-insert-prompt-context)
 						    :temperature nalec-temperature)))
   (setq nalec-most-recent-request
@@ -261,8 +261,8 @@ INSTR is a string containing the natural language instructions."
 			    "whatever is appropriate" t)))
     (message "Sending data to llm...")
     (nalec-insert-at-point
-     `(((text . ,(nalec-yank-image-prompt-text instr))
-       (image . ,image)))
+     `(,(nalec-yank-image-prompt-text instr)
+       ,(make-llm-provider-utils-image :mime-type "image/png" :data image))
      (lambda (_) (message "Finished nalec yank image"))
      (and (bolp) (eolp)))))
 
