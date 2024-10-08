@@ -85,54 +85,64 @@
  include them directly without backslash."))
 
 ;; Message prompts
+(defun nalec--basic-context ()
+  (format "I am working on a file in %s with %s lines. "
+	  major-mode
+	  (count-lines (point-min) (point-max))))
+
+(defun nalec--insertion-point-context ()
+  (when (not (bolp))
+     (concat (if (eolp)
+		 (concat "\nThe text will be inserted at the end of the following line:\n"
+			 (thing-at-point 'line t))
+	       (concat "\nThe text will be inserted in the middle of the line below.\n"
+		       (buffer-substring-no-properties (line-beginning-position) (point))
+		       " YOUR TEXT GOES HERE "
+		       (buffer-substring-no-properties (point) (line-end-position))))
+	     "\nOnly return the text to insert, not the whole line.")))
+
 (defun nalec-insert-prompt-text (desc)
   "Generate user prompt for `nalec-insert'.
 DESC is a description of the text to insert."
   (concat
-   (format "I am working on a file in %s with %s lines. \
-Generate text to insert matching the following description: %s\n"
-	  major-mode
-	  (count-lines (point-min) (point-max))
-	  desc)
-   (when (not (bolp))
-     (concat (if (eolp)
-		 (concat "The text will be inserted at the end of the following line:\n"
-			 (thing-at-point 'line t))
-	       (concat "The text will be inserted in the middle of the line below.\n"
-		       (buffer-substring-no-properties (line-beginning-position) (point))
-		       " YOUR TEXT GOES HERE "
-		       (buffer-substring-no-properties (point) (line-end-position))))
-	     "\nOnly return the text to insert, not the whole line."))))
+   (nalec--basic-context)
+   "Generate text to insert matching the following description: "
+   desc
+   (nalec--insertion-point-context)))
 
 (defun nalec-replace-prompt-text (instr original)
   "Generate user prompt for `nalec-replace'.
 INSTR contains instructions and ORIGINAL is the original block of text."
-  (format "I am working on a file in %s. Adjust the text selected from\
- the current buffer below according to these instructions: %s.\n\n%s"
-	  major-mode
-	  instr
-	  original))
+  (concat
+   (nalec--basic-context)
+   "Adjust the text selected from the current buffer below according to these instructions: "
+   instr
+   "\n\n"
+   original))
 
 (defun nalec-yank-prompt-text (instr)
-  (format "I am working on a file in %s and about to insert the text below\
- into the buffer. First adjust it according to these instructions: %s\n\n%s"
-	  major-mode
-	  instr
-	  (current-kill 0)))
+  (concat
+   (nalec--basic-context)
+   "I am about to insert the text below into the buffer. First adjust it according\
+ to these instructions: "
+   instr
+   (nalec--insertion-point-context)
+   "\n\n"
+   (current-kill 0)))
 
 (defun nalec-yank-image-prompt-text (instr)
-  (format "I am working on a file in %s. Use the attached image\
- to generate text to insert according to the following instructions: %s"
-	  major-mode
-	  instr))
+  (concat
+   (nalec--basic-context)
+   "Use the attached image to generate text to insert according to the following instructions: "
+   instr
+   (nalec--insertion-point-context)))
 
 (defun nalec-regexp-prompt-text (instr)
   "Generate user prompt for `nalec-regexp'.
 INSTR contains instructions for building the regexp and replacement text."
-  (format "I am working on a file in emacs %s.\
- I would like to carry out the following action using regular expression\
+  (format "%sI would like to carry out the following action using regular expression\
  search and replace: %s."
-	  major-mode
+	  (nalec--basic-context)
 	  instr))
 
 (defun nalec-redo-prompt-text (instr)
