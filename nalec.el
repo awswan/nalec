@@ -62,6 +62,7 @@
 
 ;; Same context prompt is used for both inserting and replacing
 (defun nalec-insert-prompt-context ()
+  "Generate system prompt for all insertion commands."
   (concat
    "The user is editing a file in emacs. Generate text to insert directly\
  into the file based on their instructions. "
@@ -71,6 +72,7 @@
    "Enclose the text to be inserted inside a code block. Do not include explanation.")))
 
 (defun nalec-regexp-prompt-context ()
+  "Generate system prompt for `nalec-regexp'."
   (concat
    "You assist the user by generating emacs regular expression\
  and replacement strings to carry out their tasks.\n"
@@ -121,6 +123,7 @@ INSTR contains instructions and ORIGINAL is the original block of text."
    original))
 
 (defun nalec-yank-prompt-text (instr)
+  "Generate prompt text for `nalec-yank'."
   (concat
    (nalec--basic-context)
    "I am about to insert the text below into the buffer. First adjust it according\
@@ -131,6 +134,8 @@ INSTR contains instructions and ORIGINAL is the original block of text."
    (current-kill 0)))
 
 (defun nalec-yank-image-prompt-text (instr)
+  "Generate prompt text for `nalec-yank-image'.
+INSTR contains instructions."
   (concat
    (nalec--basic-context)
    "Use the attached image to generate text to insert according to the following instructions: "
@@ -181,11 +186,14 @@ INSTR contains natural language instructions."
   (setq nalec-command-status 'llm-error))
 
 (defun nalec-start-session ()
+  "Start a nalec session. Each request is added to the existing chat rather than\
+ starting fresh each time."
   (interactive)
   (setq nalec-insert-prompt nil)
   (setq nalec-insert-session-mode t))
 
 (defun nalec-end-session ()
+  "End nalec session. Each request starts a new chat."
   (interactive)
   (setq nalec-insert-session-mode nil))
 
