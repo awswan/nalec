@@ -35,6 +35,8 @@
   :type '(plist :value-type string :tag "Options for llm provider"
 		:options (:key :chat-model)))
 (defcustom nalec-indent-after-insert t "Indent region after inserting text." :type 'boolean)
+(defcustom nalec-request-explanations nil "Request explanations from the model that are then discarded." :type 'boolean)
+
 
 (defun nalec-provider ()
   (apply
@@ -58,21 +60,12 @@
 (defvar nalec-region-end (make-marker))
 (set-marker-insertion-type nalec-region-end t)
 
-(defvar nalec-turbo-mode nil)
-(defun nalec-toggle-turbo-mode ()
-  (interactive)
-  (setq nalec-turbo-mode (not nalec-turbo-mode))
-  (message
-   (if nalec-turbo-mode
-       "Nalec turbo mode enabled"
-     "Nalec turbo mode disabled")))
-
 ;; Same context prompt is used for both inserting and replacing
 (defun nalec-insert-prompt-context ()
   (concat
    "The user is editing a file in emacs. Generate text to insert directly\
  into the file based on their instructions. "
-   (if nalec-turbo-mode
+   (if nalec-request-explanations
        "Briefly explain your reasoning and then enclose the text\
  to insert in a code block."
    "Enclose the text to be inserted inside a code block. Do not include explanation.")))
@@ -81,7 +74,7 @@
   (concat
    "You assist the user by generating emacs regular expression\
  and replacement strings to carry out their tasks.\n"
-   (if nalec-turbo-mode
+   (if nalec-request-explanations
        "Briefly explain your reasoning and then give the regular\
  expression and replace string as a json object with two string fields\
  labelled \"regular_expression\" and \"replacement_string\". "
