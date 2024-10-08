@@ -189,7 +189,7 @@ INSTR contains natural language instructions."
   (interactive)
   (setq nalec-insert-session-mode nil))
 
-(defun nalec-insert-at-point (prompt final-callback trailing-newline)
+(defun nalec--insert-at-point (prompt final-callback trailing-newline)
   (set-marker nalec-region-start (point))
   (set-marker nalec-region-end (point))
   (setq nalec-most-recent-command 'nalec-insert)
@@ -217,7 +217,7 @@ DESC is a string description of the text to be inserted."
   (interactive "MInsert text matching description: ")
   (when (string-empty-p desc) (setq desc "whatever is appropriate"))
   (message "Requesting insertion text from llm...")
-  (nalec-insert-at-point (nalec-insert-prompt-text desc)
+  (nalec--insert-at-point (nalec-insert-prompt-text desc)
 			 (lambda (_)
 			   (message "Finished nalec insert"))
 			 (and (bolp) (eolp))))
@@ -238,7 +238,7 @@ the selected region."
     (set-marker nalec-region-end (region-end))
     (delete-region (region-beginning) (region-end))
     (message "Requesting replacement text from llm...")
-    (nalec-insert-at-point
+    (nalec--insert-at-point
      (nalec-replace-prompt-text instr original)
      (lambda (text) (message
 		 "Finished nalec replace region with %s characters changed"
@@ -253,7 +253,7 @@ INSTR is a string containing the natural language instructions."
 		 nil 'minibuffer-history
 		 "whatever is appropriate" t)))
   (message "Sending text to llm...")
-  (nalec-insert-at-point (nalec-yank-prompt-text instr)
+  (nalec--insert-at-point (nalec-yank-prompt-text instr)
 			 (lambda (_) (message "Finished nalec yank"))
 			 (and (bolp) (eolp))))
 
@@ -263,7 +263,7 @@ INSTR is a string containing the natural language instructions."
 	(instr (read-string "Adapt image by: " nil 'minibuffer-history
 			    "whatever is appropriate" t)))
     (message "Sending data to llm...")
-    (nalec-insert-at-point
+    (nalec--insert-at-point
      `(,(nalec-yank-image-prompt-text instr)
        ,(make-llm-provider-utils-image :mime-type "image/png" :data image))
      (lambda (_) (message "Finished nalec yank image"))
