@@ -1,4 +1,4 @@
-;;; nalec.el --- NAtural Language Commands for Emacs -*- lexical-binding: t; -*-
+;;; nalec.el --- NAtural Language Emacs Commands -*- lexical-binding: t; -*-
 
 ;; Copyright 2024 Andrew Wakelin Swan
 
