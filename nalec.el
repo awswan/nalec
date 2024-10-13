@@ -178,10 +178,10 @@ INSTR contains natural language instructions."
 	(in-block nil))
     (dolist (line (split-string str "\r?\n"))
       (if in-block
-	  (if (string-prefix-p "```" line)
+	  (if (string-match "\\s-*```.*" line)
 	      (setq in-block nil)
 	    (push (concat line "\n") current-attempt))
-	(when (string-prefix-p "```" line)
+	(when (string-match "\\s-*```.*" line)
 	  (setq in-block t)
 	  (setq current-attempt ()))))
     (apply 'concat (reverse current-attempt))))
