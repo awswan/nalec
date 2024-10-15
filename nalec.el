@@ -289,7 +289,7 @@ INSTR is a string containing the natural language instructions."
     (message "Sending data to llm...")
     (nalec--insert-at-point
      `(,(nalec-yank-image-prompt-text instr)
-       ,(make-llm-provider-utils-image :mime-type "image/png" :data image))
+       ,(make-llm-media :mime-type "image/png" :data image))
      (lambda (_) (message "Finished nalec yank image"))
      (and (bolp) (eolp)))))
 
