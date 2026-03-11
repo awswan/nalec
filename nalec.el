@@ -24,6 +24,7 @@
 ;;; Code:
 
 (require 'llm)
+(require 'llm-agent-tools)
 
 (defun nalec--require-provider (symbol)
   (pcase symbol
@@ -35,7 +36,7 @@
      ('ollama (require 'llm-ollama))))
 
 (defgroup nalec nil "NAtural Language Commands for Emacs (nalec)." :group 'external)
-(defcustom nalec-temperature 0.2 "Temperature to use in prompts." :type 'float)
+(defcustom nalec-temperature 1.0 "Temperature to use in prompts." :type 'float)
 (defcustom nalec-provider-type 'none "Type of llm provider to use."
   :set (lambda (symbol value)
 	 (nalec--require-provider value)
@@ -330,7 +331,7 @@ passed to `query-replace-regexp'."
 
 (defun nalec-redo (instr)
   "Try the last command again with additional instructions.
-INSTR contains natural language instructions to be added to the chat."
+ INSTR contains natural language instructions to be added to the chat."
   (interactive "sRedo with instructions: ")
   (when (string-empty-p instr)
     (setq instr "briefly explain why the previous answer may have been rejected\
@@ -373,6 +374,20 @@ INSTR contains natural language instructions to be added to the chat."
 	(llm-cancel-request nalec-most-recent-request)
 	(setq nalec-command-status 'cancelled))
     (message "No nalec command in progress")))
+
+(defconst nalec--tool-context "You have tools to select and read a region of the current buffer. Once a region has been selected you can edit text inside it.")
+
+(defun nalec-agent (instr)
+  "Run an agent with given instructions.
+INSTR contains the natural language instructions."
+  (interactive "sAgent instructions: ")
+  (let ((prompt (llm-make-chat-prompt
+	     instr
+	     :context (concat (nalec--basic-context) nalec--tool-context)
+	     :tools (append llm-select-tools llm-edit-tools llm-buffer-tools))))
+    (while-let ((result (llm-chat (nalec-provider) prompt))
+		(fun-symb (and (listp result) (caar result))))
+      (message "Used function %s" fun-symb))))
 
 (provide 'nalec)
 ;;; nalec.el ends here
